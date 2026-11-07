@@ -23,6 +23,8 @@ final class GuestRuntime: NSObject {
     var loop: Task<Void, Never>?
     var window: NSWindow?
     var label: NSTextField?
+    var statusItem: NSStatusItem?
+    var statusMenuItem: NSMenuItem?
     let desktop = DesktopStream()
     var lastRequest = Date.distantPast
 
@@ -37,31 +39,14 @@ final class GuestRuntime: NSObject {
     }
     func start() {
         GuestBootstrap.registerForGuestLogin()
-        NSApp.setActivationPolicy(.regular)
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 300), styleMask: [.titled, .miniaturizable], backing: .buffered, defer: false)
-        window.title = "terminal-mac guest helper"
-        let title = NSTextField(labelWithString: "This virtual Mac is ready for your agent.")
-        title.font = .systemFont(ofSize: 19, weight: .semibold)
-        let description = NSTextField(wrappingLabelWithString: "Allow Screen Recording and Accessibility inside this VM. Keep this helper running in your logged-in guest desktop. Your physical Mac is not controlled.")
-        let status = NSTextField(wrappingLabelWithString: permissionStatus)
-        let capture = NSButton(title: "Allow Screen Recording", target: self, action: #selector(screenPermission))
-        let accessibility = NSButton(title: "Allow Accessibility", target: self, action: #selector(accessibilityPermission))
-        let buttons = NSStackView(views: [capture, accessibility]); buttons.orientation = .horizontal
-        let login = NSButton(title: "Guest Login Items…", target: self, action: #selector(loginSettings))
-        let stack = NSStackView(views: [title, description, status, buttons, login])
-        stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 18
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        window.contentView!.addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: window.contentView!.leadingAnchor, constant: 24),
-            stack.trailingAnchor.constraint(equalTo: window.contentView!.trailingAnchor, constant: -24),
-            stack.topAnchor.constraint(equalTo: window.contentView!.topAnchor, constant: 24)
-        ])
-        self.window = window; self.label = status
-        window.center(); window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+        installMainMenu()
+        installStatusItem()
+        // The helper lives in the menu bar; its window only appears when a permission is missing or on request.
+        if !permissionsGranted { showWindow() }
         loop = Task { @MainActor [weak self] in
             while let self, !Task.isCancelled {
                 self.label?.stringValue = self.permissionStatus
+                self.statusMenuItem?.title = self.permissionStatus
                 do {
                     for request in try mailbox.requests() {
                         lastRequest = Date()
@@ -77,6 +62,68 @@ final class GuestRuntime: NSObject {
             }
         }
     }
+    /// A menu-bar-only app has no menu bar of its own; this minimal one makes Cmd+W and Cmd+Q work on the setup window.
+    func installMainMenu() {
+        let application = NSMenu()
+        let applicationItem = NSMenuItem(); application.addItem(applicationItem)
+        let applicationMenu = NSMenu()
+        applicationMenu.addItem(NSMenuItem(title: "Quit Guest Helper", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        applicationItem.submenu = applicationMenu
+        let windowItem = NSMenuItem(); application.addItem(windowItem)
+        let windowMenu = NSMenu(title: "Window")
+        windowMenu.addItem(NSMenuItem(title: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w"))
+        windowItem.submenu = windowMenu
+        NSApp.mainMenu = application
+    }
+    func installStatusItem() {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        if let button = item.button {
+            button.image = NSImage(systemSymbolName: "desktopcomputer", accessibilityDescription: "terminal-mac guest helper")
+            button.toolTip = "terminal-mac guest helper \(appVersion)"
+        }
+        let menu = NSMenu()
+        let status = NSMenuItem(title: permissionStatus, action: nil, keyEquivalent: ""); status.isEnabled = false
+        menu.addItem(status)
+        menu.addItem(NSMenuItem(title: "Open Setup Window…", action: #selector(showWindow), keyEquivalent: ""))
+        menu.addItem(.separator())
+        menu.addItem(NSMenuItem(title: "Allow Screen Recording", action: #selector(screenPermission), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Allow Accessibility", action: #selector(accessibilityPermission), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Guest Login Items…", action: #selector(loginSettings), keyEquivalent: ""))
+        menu.addItem(.separator())
+        menu.addItem(NSMenuItem(title: "Quit Guest Helper", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        for entry in menu.items where entry.action != #selector(NSApplication.terminate(_:)) { entry.target = self }
+        item.menu = menu
+        statusItem = item; statusMenuItem = status
+    }
+    @objc func showWindow() {
+        if window == nil {
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 300), styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
+            window.title = "terminal-mac guest helper"
+            window.isReleasedWhenClosed = false
+            let title = NSTextField(labelWithString: "This virtual Mac is ready for your agent.")
+            title.font = .systemFont(ofSize: 19, weight: .semibold)
+            let description = NSTextField(wrappingLabelWithString: "Allow Screen Recording and Accessibility inside this VM. The helper stays in the menu bar of your logged-in guest desktop. Your physical Mac is not controlled.")
+            let status = NSTextField(wrappingLabelWithString: permissionStatus)
+            let capture = NSButton(title: "Allow Screen Recording", target: self, action: #selector(screenPermission))
+            let accessibility = NSButton(title: "Allow Accessibility", target: self, action: #selector(accessibilityPermission))
+            let buttons = NSStackView(views: [capture, accessibility]); buttons.orientation = .horizontal
+            let login = NSButton(title: "Guest Login Items…", target: self, action: #selector(loginSettings))
+            let stack = NSStackView(views: [title, description, status, buttons, login])
+            stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 18
+            stack.translatesAutoresizingMaskIntoConstraints = false
+            window.contentView!.addSubview(stack)
+            NSLayoutConstraint.activate([
+                stack.leadingAnchor.constraint(equalTo: window.contentView!.leadingAnchor, constant: 24),
+                stack.trailingAnchor.constraint(equalTo: window.contentView!.trailingAnchor, constant: -24),
+                stack.topAnchor.constraint(equalTo: window.contentView!.topAnchor, constant: 24)
+            ])
+            window.center()
+            self.window = window; self.label = status
+        }
+        window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+    var permissionsGranted: Bool { CGPreflightScreenCaptureAccess() && AXIsProcessTrusted() }
     var permissionStatus: String {
         "Screen Recording: \(CGPreflightScreenCaptureAccess() ? "allowed" : "needed")   ·   Accessibility: \(AXIsProcessTrusted() ? "allowed" : "needed")"
     }

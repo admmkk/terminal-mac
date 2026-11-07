@@ -59,7 +59,7 @@ The tools only drive the guest helper. They never touch your own desktop. When t
 
 The first run opens the virtual Mac's window. Complete macOS setup and create its user account. Inside the guest, open Finder → `/Volumes/My Shared Files/tools` → `TerminalMacGuest.app` once. The helper installs itself in the guest's `~/Applications`, launches that installed copy and registers for future guest logins, subject to macOS approval.
 
-Use its two buttons to grant **Screen Recording** and **Accessibility** inside the guest. Reopen it if macOS asks. If needed, its **Guest Login Items** button opens the startup setting. The host needs neither privacy permission. Once both guest permissions are ready, the CLI automatically continues to the terminal desktop.
+Use its two buttons to grant **Screen Recording** and **Accessibility** inside the guest. Reopen it if macOS asks. If needed, its **Guest Login Items** button opens the startup setting. The host needs neither privacy permission. Once both guest permissions are ready, the CLI automatically continues to the terminal desktop. From then on the helper lives as a computer icon in the guest's menu bar: it opens at login without showing a window, the icon's menu shows the permission state, and **Open Setup Window…** brings the window back.
 
 This is guided setup, not an unattended guest installation. Apple documents automatic account provisioning for macOS 27 guests; this build targets the APIs available in the installed macOS 26 SDK and does not implement that newer flow. See [Apple's provisioning documentation](https://developer.apple.com/documentation/virtualization/vzmacguestprovisioningoptions).
 

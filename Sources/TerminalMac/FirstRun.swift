@@ -72,6 +72,7 @@ extension CLI {
               2. Open Finder → /Volumes/My Shared Files/tools → TerminalMacGuest.app.
                  It installs itself in the guest and registers for future guest logins.
               3. Use its two buttons to allow Screen Recording and Accessibility.
+                 Afterwards it stays as an icon in the guest's menu bar.
             Waiting for the virtual Mac to be ready. You can rerun this command later.
             """)
         }

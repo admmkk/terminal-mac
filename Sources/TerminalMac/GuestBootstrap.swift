@@ -39,10 +39,28 @@ enum GuestBootstrap {
             }
             if exists { try? FileManager.default.removeItem(at: backup) }
         }
+        // The launched copy replaces any installed helper that is already running (see replaceRunningInstances):
+        // two helpers answer every mailbox request twice, so each key press would type two characters.
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.createsNewApplicationInstance = true
         _ = try await NSWorkspace.shared.openApplication(at: destination, configuration: configuration)
         return true
+    }
+    /// Running helpers launched from `bundle`, other than this process.
+    static func runningInstalledHelpers(at bundle: URL) -> [NSRunningApplication] {
+        let location = bundle.resolvingSymlinksInPath()
+        return NSRunningApplication.runningApplications(withBundleIdentifier: "dev.terminal-mac.guest").filter {
+            $0.processIdentifier != ProcessInfo.processInfo.processIdentifier && !hasExited($0)
+                && $0.bundleURL?.resolvingSymlinksInPath() == location
+        }
+    }
+    /// The installed helper is single-instance, and the newest launch wins: reopening it is how macOS asks users to
+    /// pick up a fresh Screen Recording grant, and the helper has no menu bar, so Cmd+Q cannot quit the old one.
+    static func replaceRunningInstances() async {
+        guard Bundle.main.bundleIdentifier == "dev.terminal-mac.guest" else { return }
+        let twins = runningInstalledHelpers(at: Bundle.main.bundleURL)
+        guard !twins.isEmpty else { return }
+        await terminate(twins)
     }
     /// `NSRunningApplication.isTerminated` only updates when this process's run loop observes the exit, which
     /// the setup flow cannot rely on, so the kernel is asked directly whether the process still exists.

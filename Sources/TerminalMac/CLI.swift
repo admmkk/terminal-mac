@@ -154,6 +154,7 @@ final class CLI {
             try GuestGuard.requireVirtualMac()
             if args.flags.contains("check") { print("virtual-mac"); return }
             if try await GuestBootstrap.installAndRelaunchIfNeeded() { return }
+            await GuestBootstrap.replaceRunningInstances()
             let exchange = URL(fileURLWithPath: args.options["exchange"] ?? "/Volumes/My Shared Files/control")
             guest = try GuestRuntime(exchange: exchange)
             guest!.start()

@@ -158,6 +158,7 @@ final class GuestRuntime: NSObject {
                 let dy = try number(request, "dy", range: -1000...1000)
                 let dx = Int(request.arguments["dx"] ?? "0") ?? 0
                 guard (-1000...1000).contains(dx), let event = CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 2, wheel1: Int32(dy), wheel2: Int32(dx), wheel3: 0) else { throw Failure("Invalid scroll") }
+                event.flags = []
                 event.post(tap: .cghidEventTap)
             case "type":
                 try requireAccessibility()
@@ -201,6 +202,8 @@ final class GuestRuntime: NSObject {
     }
     func postMouse(_ type: CGEventType, point: CGPoint, button: CGMouseButton, count: Int = 1) throws {
         guard let event = CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: point, mouseButton: button) else { throw Failure("Cannot create mouse event") }
+        // A plain click must not become cmd-click because a shortcut was pressed earlier.
+        event.flags = []
         event.setIntegerValueField(.mouseEventClickState, value: Int64(count))
         event.post(tap: .cghidEventTap)
     }

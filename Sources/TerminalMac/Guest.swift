@@ -102,6 +102,18 @@ final class GuestRuntime: NSObject {
                           // Build and pid show which helper answered, so an update or relaunch can be confirmed from the host.
                           "build": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "",
                           "bundlePath": Bundle.main.bundlePath, "pid": String(ProcessInfo.processInfo.processIdentifier)]
+            case "permissions":
+                // A helper signed with a new identity keeps its toggles in System Settings while the grants behind them
+                // are void, so drop the recorded grants and prompt again from this process. macOS 27 adds a second
+                // screen-capture prompt here that the Settings toggle alone never shows.
+                for service in ["Accessibility", "ScreenCapture"] {
+                    let reset = Process(); reset.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil"); reset.arguments = ["reset", service, "dev.terminal-mac.guest"]
+                    reset.standardOutput = FileHandle.nullDevice; reset.standardError = FileHandle.nullDevice
+                    try reset.run(); reset.waitUntilExit()
+                    guard reset.terminationStatus == 0 else { throw Failure("tccutil reset \(service) failed with status \(reset.terminationStatus)") }
+                }
+                let accessibility = AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary)
+                values = ["accessibility": String(accessibility), "screenRecording": String(CGRequestScreenCaptureAccess())]
             case "screenshot" where request.arguments["format"] == "bgra-lz4":
                 guard CGPreflightScreenCaptureAccess() else { throw Failure("Allow Screen Recording for TerminalMacGuest inside the VM, then reopen the helper if macOS requests it") }
                 try await desktop.prepare(maxWidth: number(request, "maxWidth", range: 16...7680), maxHeight: number(request, "maxHeight", range: 16...4320))
